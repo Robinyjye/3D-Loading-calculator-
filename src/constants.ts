@@ -13,19 +13,19 @@ export const CONTAINER_HEIGHT = 2.68;
 export const GAP = 0.01;
 
 const RAW_DEFINITIONS: Omit<ProductDefinition, 'color'>[] = [
-  { name: "Grayling(MK210)", length: 1.81, width: 1.41, height: 0.81 },
-  { name: "Marquess(MK301)", length: 1.81, width: 1.81, height: 0.81 },
-  { name: "Monarch(MK300)", length: 1.91, width: 1.91, height: 0.81 },
-  { name: "Admiral(MK310)", length: 1.91, width: 1.91, height: 0.81 },
-  { name: "Viceroy(MK320)", length: 1.91, width: 1.91, height: 0.81 },
-  { name: "Emperor(MK510)", length: 2.08, width: 2.08, height: 0.93 },
-  { name: "Commodore(MK500)", length: 2.08, width: 2.08, height: 0.93 },
-  { name: "Imperial(MK700)", length: 2.31, width: 2.31, height: 0.93 },
-  { name: " Duke(MK710）", length: 2.31, width: 2.31, height: 0.93 },
-  { name: "Sovereign(MKA330)", length: 3.31, width: 2.36, height: 0.98 },
+  { name: "Grayling", length: 1.81, width: 1.41, height: 0.81 },
+  { name: "Marquess", length: 1.81, width: 1.81, height: 0.81 },
+  { name: "Monarch", length: 1.91, width: 1.91, height: 0.81 },
+  { name: "Admiral", length: 1.91, width: 1.91, height: 0.81 },
+  { name: "Viceroy", length: 1.91, width: 1.91, height: 0.81 },
+  { name: "Emperor", length: 2.08, width: 2.08, height: 0.93 },
+  { name: "Commodore", length: 2.08, width: 2.08, height: 0.93 },
+  { name: "Imperial", length: 2.31, width: 2.31, height: 0.93 },
+  { name: " Duke", length: 2.31, width: 2.31, height: 0.93 },
+  { name: "Sovereign", length: 3.31, width: 2.36, height: 0.98 },
   
-  { name: "AFS1(MKA400)", length: 4.01, width: 2.26, height: 1.54, series: 'swimspas' },
-  { name: "AFS2(MKA500)", length: 5.01, width: 2.26, height: 1.54, series: 'swimspas'},
+  { name: "AFS1", length: 4.01, width: 2.26, height: 1.54, series: 'swimspas' },
+  { name: "AFS2", length: 5.01, width: 2.26, height: 1.54, series: 'swimspas'},
   ];
 
 export const PRODUCT_DEFINITIONS: ProductDefinition[] = RAW_DEFINITIONS.map((def, index) => {
