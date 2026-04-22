@@ -1,2 +1,2 @@
 # 3D-Loading-calculator-
-Input your product list and dimensions to receive an optimized loading plan for a 40' HQcontainer
+Input your product list and dimensions to receive an optimized loading plan for a 40' HQ container
