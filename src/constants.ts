@@ -24,8 +24,8 @@ const RAW_DEFINITIONS: Omit<ProductDefinition, 'color'>[] = [
   { name: " Duke(MK710）", length: 2.31, width: 2.31, height: 0.93 },
   { name: "Sovereign(MKA330)", length: 3.31, width: 2.36, height: 0.98 },
   
-  { name: "AFS1(MKA400)", length: 4.01, width: 2.26, height: 1.54 series: 'swimspas' },
-  { name: "AFS2(MKA500)", length: 5.01, width: 2.26, height: 1.54 series: 'swimspas'},
+  { name: "AFS1(MKA400)", length: 4.01, width: 2.26, height: 1.54, series: 'swimspas' },
+  { name: "AFS2(MKA500)", length: 5.01, width: 2.26, height: 1.54, series: 'swimspas'},
   ];
 
 export const PRODUCT_DEFINITIONS: ProductDefinition[] = RAW_DEFINITIONS.map((def, index) => {
