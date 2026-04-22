@@ -13,7 +13,7 @@ export const CONTAINER_HEIGHT = 2.68;
 export const GAP = 0.01;
 
 const RAW_DEFINITIONS: Omit<ProductDefinition, 'color'>[] = [
-  { name: "Grayling（MK210)", length: 1.81, width: 1.41, height: 0.81 },
+  { name: "Grayling(MK210)", length: 1.81, width: 1.41, height: 0.81 },
   { name: "Marquess(MK301)", length: 1.81, width: 1.81, height: 0.81 },
   { name: "Monarch(MK300)", length: 1.91, width: 1.91, height: 0.81 },
   { name: "Admiral(MK310)", length: 1.91, width: 1.91, height: 0.81 },
