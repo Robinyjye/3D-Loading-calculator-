@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { PRODUCT_DEFINITIONS, ProductDefinition } from './constants';
+import { PRODUCT_DEFINITIONS, ProductDefinition, CONTAINER_LENGTH, CONTAINER_WIDTH, CONTAINER_HEIGHT } from './constants';
 import { calculateLayout, LayoutResult } from './utils/layoutAlgorithm';
 import LayoutVisualizer from './components/LayoutVisualizer';
 import { RotateCcw, Play, Waves, Bath, Plus, Trash2, X, Download, Pencil, Upload, Copy } from 'lucide-react';
@@ -350,6 +350,31 @@ export default function App() {
 
   const currentProducts = (activeTab === 'spas' ? spas : swimSpas).filter(p => !hiddenProducts.includes(p.name));
 
+  const volumeStats = useMemo(() => {
+    if (!result) return null;
+    
+    const containerVolume = CONTAINER_LENGTH * CONTAINER_WIDTH * CONTAINER_HEIGHT;
+    let selectedVolume = 0;
+    
+    // Calculate total volume of ALL requested products
+    allProducts.forEach(product => {
+      const q = parseInt(quantities[product.name] || '0', 10);
+      if (q > 0) {
+        selectedVolume += (product.length * product.width * (product.height || 0.9)) * q;
+      }
+    });
+
+    const remainingVolume = Math.max(0, containerVolume - selectedVolume);
+    const fillRate = (selectedVolume / containerVolume) * 100;
+
+    return {
+      containerVolume,
+      selectedVolume,
+      remainingVolume,
+      fillRate
+    };
+  }, [result, quantities, allProducts]);
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8 font-sans text-gray-900">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -529,7 +554,7 @@ export default function App() {
                 className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
               >
                 <h3 className="text-xl font-semibold mb-4">Results Summary</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
                   <div>
                     <p className="text-lg text-gray-500">Total Products Fitted</p>
                     <p className="text-4xl font-bold text-emerald-600">{result.totalProductsFitted} / {result.totalProductsRequested}</p>
@@ -547,6 +572,27 @@ export default function App() {
                     </p>
                   </div>
                 </div>
+
+                {volumeStats && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-4 border-t border-gray-100">
+                    <div>
+                      <p className="text-sm text-gray-500 font-semibold">Total capacity</p>
+                      <p className="text-2xl font-bold text-gray-900">{volumeStats.containerVolume.toFixed(2)} m³</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500 font-semibold">Selected volume</p>
+                      <p className="text-2xl font-bold text-emerald-600">{volumeStats.selectedVolume.toFixed(2)} m³</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500 font-semibold">Remaining volume</p>
+                      <p className="text-2xl font-bold text-blue-600">{volumeStats.remainingVolume.toFixed(2)} m³</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500 font-semibold">Fill rate</p>
+                      <p className="text-2xl font-bold text-purple-600">{volumeStats.fillRate.toFixed(1)}%</p>
+                    </div>
+                  </div>
+                )}
 
                 {result.totalProductsFitted > 0 && (
                   <div className="mt-6">

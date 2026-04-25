@@ -406,6 +406,11 @@ export default function LayoutVisualizer({ result }: LayoutVisualizerProps) {
                   </text>
                 </g>
 
+                {/* Height info text as it's a 2D view */}
+                <text x={annotationMarginX} y={annotationMarginY + (W * scale) + 50} textAnchor="start" fill="#666" fontWeight="bold" fontSize="14">
+                  Height (H): {H.toFixed(2)}m
+                </text>
+
                 {/* Container Floor Boundary */}
                 <rect 
                   x={annotationMarginX} 
