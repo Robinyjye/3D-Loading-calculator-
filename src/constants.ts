@@ -26,7 +26,7 @@ const RAW_DEFINITIONS: Omit<ProductDefinition, 'color'>[] = [
 
   { name: "AFS1", length: 4.01, width: 2.269, height: 1.54,series:'swimspas'},
   { name: "AFS2", length: 5.01, width: 2.269, height: 1.54,series:'swimspas'},
-    
+  { name: "AFS3", length: 5.91, width: 2.269, height: 1.54,series:'swimspas'},  
 ];
 
 export const PRODUCT_DEFINITIONS: ProductDefinition[] = RAW_DEFINITIONS.map((def, index) => {
