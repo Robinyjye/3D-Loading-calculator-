@@ -231,7 +231,7 @@ export default function LayoutVisualizer({ result }: LayoutVisualizerProps) {
             return (
               <g key={index} opacity={opacity}>
                 {item.hasPallet && (() => {
-                  const palH = 0.17;
+                  const palH = item.palletHeight || 0.17;
                   const palY = y - palH;
                   const pa000 = proj(x, palY, z);
                   const pa100 = proj(x+l, palY, z);

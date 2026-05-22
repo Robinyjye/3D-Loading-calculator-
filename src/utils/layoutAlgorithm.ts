@@ -11,6 +11,7 @@ export interface PlacedItem {
   rotated: boolean;
   isOverflow?: boolean;
   hasPallet?: boolean;
+  palletHeight?: number;
 }
 
 export interface LayoutResult {
@@ -207,12 +208,41 @@ export function calculateLayout(productsToLoad: { product: ProductDefinition; qu
         });
       }
 
+      let finalPalletHeight = 0;
+      let finalNeedsPallet = false;
+      const isCurrentSwimSpa = product.series === 'swimspas' || product.name.toLowerCase().includes('swimspa');
+
       for (let i = 0; i < spaces.length; i++) {
         const s = spaces[i];
-        for (const ori of orientations) {
-          const needsPallet = Math.abs(s.y) < 0.001;
-          const palletHeight = needsPallet ? 0.17 : 0;
+        
+        let seriesBelow = 'none';
+        const isOnFloor = Math.abs(s.y) < 0.001;
+        if (!isOnFloor) {
+          for (const item of placedItems) {
+            const topY = item.y + item.height + GAP;
+            if (Math.abs(topY - s.y) < 0.01) {
+              const xOverlap = Math.max(0, Math.min(s.x + s.l, item.x + item.length) - Math.max(s.x, item.x));
+              const zOverlap = Math.max(0, Math.min(s.z + s.w, item.z + item.width) - Math.max(s.z, item.z));
+              if (xOverlap > 0.001 && zOverlap > 0.001) {
+                seriesBelow = item.product.series || (item.product.name.toLowerCase().includes('swimspa') ? 'swimspas' : 'spas');
+                break;
+              }
+            }
+          }
+        }
 
+        let needsPallet = false;
+        let palletHeight = 0;
+        
+        if (isOnFloor) {
+           needsPallet = true;
+           palletHeight = 0.17;
+        } else if (seriesBelow === 'swimspas' && !isCurrentSwimSpa) {
+           needsPallet = true;
+           palletHeight = 0.03;
+        }
+
+        for (const ori of orientations) {
           const oL = ori.l + GAP;
           const oW = ori.w + GAP;
           const oH = ori.h + GAP + palletHeight;
@@ -222,6 +252,8 @@ export function calculateLayout(productsToLoad: { product: ProductDefinition; qu
               bestSpaceIndex = i; 
               bestOri = ori;
               minX = s.x; minY = s.y; minZ = s.z;
+              finalNeedsPallet = needsPallet;
+              finalPalletHeight = palletHeight;
             }
           }
         }
@@ -230,8 +262,8 @@ export function calculateLayout(productsToLoad: { product: ProductDefinition; qu
 
       if (bestSpaceIndex !== -1) {
         const bs = spaces[bestSpaceIndex];
-        const needsPallet = Math.abs(bs.y) < 0.001;
-        const palletHeight = needsPallet ? 0.17 : 0;
+        const needsPallet = finalNeedsPallet;
+        const palletHeight = finalPalletHeight;
 
         const usedL = bestOri.l;
         const usedW = bestOri.w;
@@ -249,7 +281,8 @@ export function calculateLayout(productsToLoad: { product: ProductDefinition; qu
           product: product,
           rotated: usedL !== product.length || usedW !== product.width,
           isOverflow,
-          hasPallet: needsPallet
+          hasPallet: needsPallet,
+          palletHeight: palletHeight
         });
         
         if (!isOverflow) totalProductsFitted++;
