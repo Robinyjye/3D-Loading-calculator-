@@ -127,22 +127,27 @@ export default function App() {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Loaded Breakdown");
-    XLSX.writeFile(wb, "container-loading-plan.xlsx");
+    const date = new Date().toISOString().split("T")[0];
+    XLSX.writeFile(wb, `container-loading-plan_${date}.xlsx`);
   };
 
   const handleExportBackup = () => {
-    const data = currentProducts.map(p => ({
+    const productsToExport = allProducts.filter(p => !hiddenProducts.includes(p.name));
+    const data = productsToExport.map(p => ({
       'Product Name': p.name,
       'Length (m)': p.length,
       'Width (m)': p.width,
+      'Height (m)': p.height || 0.9,
       'Color': p.color,
+      'Series': p.series || '',
       'Quantity': quantities[p.name] || 0
     }));
     
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Products Backup");
-    XLSX.writeFile(wb, "product_backup.xlsx");
+    const date = new Date().toISOString().split("T")[0];
+    XLSX.writeFile(wb, `product_backup_${date}.xlsx`);
   };
 
   const handleImportClick = () => {
@@ -177,13 +182,19 @@ export default function App() {
           if (!name || isNaN(length) || isNaN(width) || isNaN(height)) return;
 
           const defaultProduct = PRODUCT_DEFINITIONS.find(p => p.name === name);
-          if (defaultProduct && defaultProduct.length === length && defaultProduct.width === width && defaultProduct.height === height && defaultProduct.color === color) {
-            // It's exactly the default product, unhide it
+          const series = row['Series'] || (defaultProduct ? defaultProduct.series : undefined);
+
+          // If it's a default product (modified or not), unhide it
+          if (defaultProduct) {
             const index = newHiddenProducts.indexOf(name);
             if (index > -1) newHiddenProducts.splice(index, 1);
+          }
+
+          if (defaultProduct && defaultProduct.length === length && defaultProduct.width === width && defaultProduct.height === height && defaultProduct.color === color) {
+            // It's exactly the default product
           } else {
             // It's a custom or modified product
-            newCustomProducts.push({ name, length, width, height, color });
+            newCustomProducts.push({ name, length, width, height, color, series });
           }
 
           if (qty > 0) {
