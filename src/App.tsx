@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { PRODUCT_DEFINITIONS, ProductDefinition, CONTAINER_LENGTH, CONTAINER_WIDTH, CONTAINER_HEIGHT } from './constants';
-import { calculateLayout, LayoutResult } from './utils/layoutAlgorithm';
+import { calculateLayout, calculateLayoutGenerator, LayoutResult, CalculationStep } from './utils/layoutAlgorithm';
 import LayoutVisualizer from './components/LayoutVisualizer';
 import { RotateCcw, Play, Waves, Bath, Plus, Trash2, X, Download, Pencil, Upload, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -15,6 +15,9 @@ export default function App() {
   });
   const [result, setResult] = useState<LayoutResult | null>(null);
   const [activeTab, setActiveTab] = useState<'spas' | 'swimspas'>('spas');
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [calculationProgress, setCalculationProgress] = useState(0);
+  const [calculationStatus, setCalculationStatus] = useState('');
   const [customProducts, setCustomProducts] = useState<ProductDefinition[]>(() => {
     try {
       const saved = localStorage.getItem('container-calc-custom-products');
@@ -84,7 +87,7 @@ export default function App() {
     }));
   };
 
-  const handleStart = () => {
+  const handleStart = async () => {
     const productsToLoad: { product: ProductDefinition; quantity: number }[] = [];
     
     allProducts.forEach(def => {
@@ -94,11 +97,37 @@ export default function App() {
       }
     });
 
-    // We pass true for "isRetry" only if there is already a result
-    // This allows the layout algorithm to enable random Hill Climbing
+    if (productsToLoad.length === 0) return;
+
+    setIsCalculating(true);
+    setCalculationProgress(0);
+    setCalculationStatus('Preparing layout runs...');
+
     const isRetry = result !== null;
-    const layoutResult = calculateLayout(productsToLoad, isRetry);
-    setResult(layoutResult);
+    const generator = calculateLayoutGenerator(productsToLoad, isRetry);
+
+    // Briefly pause to show initial loading
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    while (true) {
+      const step = generator.next();
+      if (!step.done) {
+        const val = step.value as CalculationStep;
+        setCalculationProgress(val.progress);
+        setCalculationStatus(val.status);
+        if (val.bestResultSoFar) {
+          setResult(val.bestResultSoFar);
+        }
+        // Smooth progression loop delay to show search space clearly
+        await new Promise(resolve => setTimeout(resolve, isRetry ? 2 : 15));
+      } else {
+        setResult(step.value as LayoutResult);
+        setIsCalculating(false);
+        setCalculationProgress(100);
+        setCalculationStatus('Calculations complete!');
+        break;
+      }
+    }
   };
 
   const handleReset = () => {
@@ -402,23 +431,46 @@ export default function App() {
 
         {/* Sticky Action Bar */}
         <div className="sticky top-4 z-40 bg-white/80 backdrop-blur-md p-4 rounded-xl shadow-md border border-gray-200">
-          <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 justify-center items-center max-w-2xl mx-auto">
-            <button
-              onClick={handleReset}
-              className="w-full sm:w-auto flex-1 flex items-center justify-center space-x-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-6 py-3 rounded-lg font-medium transition-colors shadow-sm"
-              title="Reset"
-            >
-              <RotateCcw size={24} />
-              <span className="text-xl">Reset</span>
-            </button>
-            <button
-              onClick={handleStart}
-              className="w-full sm:w-auto flex-[2] flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-lg font-bold transition-colors shadow-sm text-2xl"
-            >
-              <Play size={24} />
-              <span>{result ? 'Calculate (Retry/Optimize)' : 'Start Calculation'}</span>
-            </button>
-          </div>
+          {isCalculating ? (
+            <div className="max-w-2xl mx-auto space-y-3">
+              <div className="flex items-center justify-between text-sm font-semibold text-gray-700">
+                <span className="flex items-center space-x-2">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                  </span>
+                  <span className="text-gray-800 font-medium tracking-tight text-base">{calculationStatus}</span>
+                </span>
+                <span className="text-emerald-600 text-lg font-bold font-mono">{calculationProgress}%</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden border border-gray-200/50">
+                <motion.div
+                  className="bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 h-full rounded-full"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${calculationProgress}%` }}
+                  transition={{ duration: 0.1, ease: "easeOut" }}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 justify-center items-center max-w-2xl mx-auto">
+              <button
+                onClick={handleReset}
+                className="w-full sm:w-auto flex-1 flex items-center justify-center space-x-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-6 py-3 rounded-lg font-medium transition-colors shadow-sm"
+                title="Reset"
+              >
+                <RotateCcw size={24} />
+                <span className="text-xl">Reset</span>
+              </button>
+              <button
+                onClick={handleStart}
+                className="w-full sm:w-auto flex-[2] flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-lg font-bold transition-colors shadow-sm text-2xl"
+              >
+                <Play size={24} />
+                <span>{result ? 'Calculate (Retry/Optimize)' : 'Start Calculation'}</span>
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

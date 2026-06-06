@@ -36,7 +36,16 @@ interface Space {
   w: number;
 }
 
-export function calculateLayout(productsToLoad: { product: ProductDefinition; quantity: number }[], isRetry: boolean = false): LayoutResult {
+export interface CalculationStep {
+  progress: number;
+  status: string;
+  bestResultSoFar: LayoutResult | null;
+}
+
+export function* calculateLayoutGenerator(
+  productsToLoad: { product: ProductDefinition; quantity: number }[],
+  isRetry: boolean = false
+): Generator<CalculationStep, LayoutResult, unknown> {
   const totalProductsRequested = productsToLoad.reduce((sum, item) => sum + item.quantity, 0);
 
   let allProducts: ProductDefinition[] = [];
@@ -49,50 +58,59 @@ export function calculateLayout(productsToLoad: { product: ProductDefinition; qu
   let bestResult: LayoutResult | null = null;
 
   type OrientMode = 'default' | 'flat' | 'side' | 'alternate' | 'random';
-  const runs: { sortFn: (a: ProductDefinition, b: ProductDefinition) => number, orientMode: OrientMode }[] = [];
+  const runs: { sortFn: (a: ProductDefinition, b: ProductDefinition) => number, orientMode: OrientMode, description: string }[] = [];
 
-  const sortAlgorithms: ((a: ProductDefinition, b: ProductDefinition) => number)[] = [
-    // Strategy 1: Max Area descending, then volume
-    (a: ProductDefinition, b: ProductDefinition) => {
-      const maxAreaA = Math.max(a.length * a.width, a.length * a.height, a.width * a.height);
-      const maxAreaB = Math.max(b.length * b.width, b.length * b.height, b.width * b.height);
-      if (Math.abs(maxAreaA - maxAreaB) > 0.001) return maxAreaB - maxAreaA;
-      return (b.length * b.width * b.height) - (a.length * a.width * a.height);
+  const sortAlgorithms = [
+    {
+      description: "Max Area Priority Layout",
+      fn: (a: ProductDefinition, b: ProductDefinition) => {
+        const maxAreaA = Math.max(a.length * a.width, a.length * a.height, a.width * a.height);
+        const maxAreaB = Math.max(b.length * b.width, b.length * b.height, b.width * b.height);
+        if (Math.abs(maxAreaA - maxAreaB) > 0.001) return maxAreaB - maxAreaA;
+        return (b.length * b.width * b.height) - (a.length * a.width * a.height);
+      }
     },
-    // Strategy 2: Base Area descending (standard)
-    (a: ProductDefinition, b: ProductDefinition) => {
-      const baseA = Math.max(a.length, a.width) * Math.min(a.length, a.width);
-      const baseB = Math.max(b.length, b.width) * Math.min(b.length, b.width);
-      if (Math.abs(baseA - baseB) > 0.001) return baseB - baseA;
-      return (b.length * b.width * b.height) - (a.length * a.width * a.height);
+    {
+      description: "Base Area Priority Layout",
+      fn: (a: ProductDefinition, b: ProductDefinition) => {
+        const baseA = Math.max(a.length, a.width) * Math.min(a.length, a.width);
+        const baseB = Math.max(b.length, b.width) * Math.min(b.length, b.width);
+        if (Math.abs(baseA - baseB) > 0.001) return baseB - baseA;
+        return (b.length * b.width * b.height) - (a.length * a.width * a.height);
+      }
     },
-    // Strategy 3: Pure Volume descending
-    (a: ProductDefinition, b: ProductDefinition) => {
-      return (b.length * b.width * b.height) - (a.length * a.width * a.height);
+    {
+      description: "Volume Sorting Layout",
+      fn: (a: ProductDefinition, b: ProductDefinition) => {
+        return (b.length * b.width * b.height) - (a.length * a.width * a.height);
+      }
     },
-    // Strategy 4: Longest dimension descending
-    (a: ProductDefinition, b: ProductDefinition) => {
-      const maxDimA = Math.max(a.length, a.width, a.height);
-      const maxDimB = Math.max(b.length, b.width, b.height);
-      if (Math.abs(maxDimA - maxDimB) > 0.001) return maxDimB - maxDimA;
-      return (b.length * b.width * b.height) - (a.length * a.width * a.height);
+    {
+      description: "Longest Dimension Alignment Layout",
+      fn: (a: ProductDefinition, b: ProductDefinition) => {
+        const maxDimA = Math.max(a.length, a.width, a.height);
+        const maxDimB = Math.max(b.length, b.width, b.height);
+        if (Math.abs(maxDimA - maxDimB) > 0.001) return maxDimB - maxDimA;
+        return (b.length * b.width * b.height) - (a.length * a.width * a.height);
+      }
     }
   ];
 
   // Populate deterministic runs
-  for (const sortFn of sortAlgorithms) {
-    runs.push({ sortFn, orientMode: 'default' });
+  for (const sortAlg of sortAlgorithms) {
+    runs.push({ sortFn: sortAlg.fn, orientMode: 'default', description: sortAlg.description });
   }
 
   // If the user clicked starting logic again, inject random "Hill Climbing" permutations
-  // This simulates stochastic mutations in topological order and alternates flat/side modes.
   if (isRetry) {
     const orientModes: OrientMode[] = ['alternate', 'flat', 'side', 'random', 'default'];
     for (let i = 0; i < 30; i++) {
-        runs.push({
-            sortFn: () => Math.random() - 0.5, // Random shuffle
-            orientMode: orientModes[Math.floor(Math.random() * orientModes.length)]
-        });
+      const mode = orientModes[Math.floor(Math.random() * orientModes.length)];
+      runs.push({
+        sortFn: () => Math.random() - 0.5, // Random shuffle
+        orientMode: mode,
+        description: `Optimization Trial ${i + 1}/30 (${mode === 'default' ? 'prioritized' : mode} orientation)`
+      });
     }
   }
 
@@ -319,8 +337,9 @@ export function calculateLayout(productsToLoad: { product: ProductDefinition; qu
     };
   }
 
-  // Iterate over multiple runs to find best pack
-  for (const run of runs) {
+  // Iterate over multiple runs to find best pack and yield progress
+  for (let rIdx = 0; rIdx < runs.length; rIdx++) {
+    const run = runs[rIdx];
     const listCopy = [...allProducts];
     listCopy.sort(run.sortFn);
     const res = packWithStrategy(listCopy, run.orientMode);
@@ -339,7 +358,26 @@ export function calculateLayout(productsToLoad: { product: ProductDefinition; qu
         }
       }
     }
+
+    const progress = Math.round(((rIdx + 1) / runs.length) * 100);
+    yield {
+      progress,
+      status: run.description,
+      bestResultSoFar: bestResult
+    };
   }
 
   return bestResult!;
+}
+
+export function calculateLayout(
+  productsToLoad: { product: ProductDefinition; quantity: number }[],
+  isRetry: boolean = false
+): LayoutResult {
+  const gen = calculateLayoutGenerator(productsToLoad, isRetry);
+  let res = gen.next();
+  while (!res.done) {
+    res = gen.next();
+  }
+  return res.value;
 }
