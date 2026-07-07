@@ -203,37 +203,89 @@ export function* calculateLayoutGenerator(
         currentOrientMode = pIdx % 2 === 0 ? 'flat' : 'side';
       }
 
-      if (currentOrientMode === 'flat') {
-        // Laying flat: try to minimize height (h) as much as possible.
+      const isCurrentSwimSpa = product.series === 'swimspas' || product.name.toLowerCase().includes('swimspa');
+
+      if (isCurrentSwimSpa) {
+        // "swim spa优先尝试叠放，然后再试竖放" (Stacking first, then vertical)
+        // Stacking/Flat means orientation height is <= original product height.
+        // Vertical/Standing up means orientation height is > original product height.
         orientations.sort((a, b) => {
-          if (Math.abs(a.h - b.h) > 0.01) return a.h - b.h; 
-          return b.w - a.w; // Tie breaker: max width
+          const aVertical = a.h > product.height + 0.01;
+          const bVertical = b.h > product.height + 0.01;
+          if (aVertical !== bVertical) {
+            return aVertical ? 1 : -1; // Prioritize non-vertical (stacking/flat) first
+          }
+          // Tie-breakers: Use the active orientation mode sorting rules
+          if (currentOrientMode === 'flat') {
+            if (Math.abs(a.h - b.h) > 0.01) return a.h - b.h; 
+            return b.w - a.w;
+          } else if (currentOrientMode === 'side') {
+            if (Math.abs(b.h - a.h) > 0.01) return b.h - a.h;
+            return b.w - a.w; 
+          } else if (currentOrientMode === 'random') {
+            return Math.random() - 0.5;
+          } else {
+            if (b.w !== a.w) return b.w - a.w;
+            if (b.l !== a.l) return b.l - a.l;
+            return 0;
+          }
         });
-      } else if (currentOrientMode === 'side') {
-        // Laying side: try to maximize height (h) to stand it up.
+      } else if (product.height > 0.82) {
+        // "高度大于0.82m的产品，优先尝试竖放，再尝试叠放" (Vertical first, then stacking/flat)
         orientations.sort((a, b) => {
-          if (Math.abs(b.h - a.h) > 0.01) return b.h - a.h;
-          return b.w - a.w; 
+          const aVertical = a.h > product.height + 0.01;
+          const bVertical = b.h > product.height + 0.01;
+          if (aVertical !== bVertical) {
+            return aVertical ? -1 : 1; // Prioritize vertical (standing up) first
+          }
+          // Tie-breakers: Use the active orientation mode sorting rules
+          if (currentOrientMode === 'flat') {
+            if (Math.abs(a.h - b.h) > 0.01) return a.h - b.h; 
+            return b.w - a.w;
+          } else if (currentOrientMode === 'side') {
+            if (Math.abs(b.h - a.h) > 0.01) return b.h - a.h;
+            return b.w - a.w; 
+          } else if (currentOrientMode === 'random') {
+            return Math.random() - 0.5;
+          } else {
+            if (b.w !== a.w) return b.w - a.w;
+            if (b.l !== a.l) return b.l - a.l;
+            return 0;
+          }
         });
-      } else if (currentOrientMode === 'random') {
-        orientations.sort(() => Math.random() - 0.5);
       } else {
-        // Default - User restriction: Prioritize placing the longest dimension parallel to container's width (w-axis)
-        orientations.sort((a, b) => {
-          if (b.w !== a.w) return b.w - a.w; // Largest dimension along width first
-          if (b.l !== a.l) return b.l - a.l; // Secondary: largest remaining along length
-          return 0;
-        });
+        if (currentOrientMode === 'flat') {
+          // Laying flat: try to minimize height (h) as much as possible.
+          orientations.sort((a, b) => {
+            if (Math.abs(a.h - b.h) > 0.01) return a.h - b.h; 
+            return b.w - a.w; // Tie breaker: max width
+          });
+        } else if (currentOrientMode === 'side') {
+          // Laying side: try to maximize height (h) to stand it up.
+          orientations.sort((a, b) => {
+            if (Math.abs(b.h - a.h) > 0.01) return b.h - a.h;
+            return b.w - a.w; 
+          });
+        } else if (currentOrientMode === 'random') {
+          orientations.sort(() => Math.random() - 0.5);
+        } else {
+          // Default - User restriction: Prioritize placing the longest dimension parallel to container's width (w-axis)
+          orientations.sort((a, b) => {
+            if (b.w !== a.w) return b.w - a.w; // Largest dimension along width first
+            if (b.l !== a.l) return b.l - a.l; // Secondary: largest remaining along length
+            return 0;
+          });
+        }
       }
 
       let finalPalletHeight = 0;
       let finalNeedsPallet = false;
-      const isCurrentSwimSpa = product.series === 'swimspas' || product.name.toLowerCase().includes('swimspa');
 
       for (let i = 0; i < spaces.length; i++) {
         const s = spaces[i];
         
         let seriesBelow = 'none';
+        let itemBelow: PlacedItem | null = null;
         const isOnFloor = Math.abs(s.y) < 0.001;
         if (!isOnFloor) {
           for (const item of placedItems) {
@@ -243,9 +295,18 @@ export function* calculateLayoutGenerator(
               const zOverlap = Math.max(0, Math.min(s.z + s.w, item.z + item.width) - Math.max(s.z, item.z));
               if (xOverlap > 0.001 && zOverlap > 0.001) {
                 seriesBelow = item.product.series || (item.product.name.toLowerCase().includes('swimspa') ? 'swimspas' : 'spas');
+                itemBelow = item;
                 break;
               }
             }
+          }
+        }
+
+        // Rule: Products with length < 1.82m cannot be stacked on top of a swim spa
+        if (itemBelow && product.length < 1.82) {
+          const isBelowSwimSpa = itemBelow.product.series === 'swimspas' || itemBelow.product.name.toLowerCase().includes('swimspa');
+          if (isBelowSwimSpa) {
+            continue; // Skip this space entirely!
           }
         }
 
@@ -260,19 +321,32 @@ export function* calculateLayoutGenerator(
            palletHeight = 0.03;
         }
 
+        let bestOriForSpace: typeof orientations[0] | null = null;
         for (const ori of orientations) {
           const oL = ori.l + GAP;
           const oW = ori.w + GAP;
           const oH = ori.h + GAP + palletHeight;
 
           if (oL <= s.l + 0.001 && oH <= s.h + 0.001 && oW <= s.w + 0.001) {
-            if (s.x < minX || (Math.abs(s.x - minX) < 0.01 && s.y < minY) || (Math.abs(s.x - minX) < 0.01 && Math.abs(s.y - minY) < 0.01 && s.z < minZ)) {
-              bestSpaceIndex = i; 
-              bestOri = ori;
-              minX = s.x; minY = s.y; minZ = s.z;
-              finalNeedsPallet = needsPallet;
-              finalPalletHeight = palletHeight;
+            if (!bestOriForSpace) {
+              bestOriForSpace = ori;
+            } else {
+              const currentOverflow = (s.x + ori.l > CONTAINER_LENGTH);
+              const bestOverflow = (s.x + bestOriForSpace.l > CONTAINER_LENGTH);
+              if (bestOverflow && !currentOverflow) {
+                bestOriForSpace = ori;
+              }
             }
+          }
+        }
+
+        if (bestOriForSpace) {
+          if (s.x < minX || (Math.abs(s.x - minX) < 0.01 && s.y < minY) || (Math.abs(s.x - minX) < 0.01 && Math.abs(s.y - minY) < 0.01 && s.z < minZ)) {
+            bestSpaceIndex = i; 
+            bestOri = bestOriForSpace;
+            minX = s.x; minY = s.y; minZ = s.z;
+            finalNeedsPallet = needsPallet;
+            finalPalletHeight = palletHeight;
           }
         }
         if (bestSpaceIndex !== -1) break; 

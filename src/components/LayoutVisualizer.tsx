@@ -4,9 +4,17 @@ import { LayoutResult } from '../utils/layoutAlgorithm';
 
 interface LayoutVisualizerProps {
   result: LayoutResult | null;
+  isCalculating?: boolean;
+  progress?: number;
+  status?: string;
 }
 
-export default function LayoutVisualizer({ result }: LayoutVisualizerProps) {
+export default function LayoutVisualizer({ 
+  result,
+  isCalculating = false,
+  progress = 0,
+  status = ''
+}: LayoutVisualizerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(50); // Pixels per meter
 
@@ -24,6 +32,84 @@ export default function LayoutVisualizer({ result }: LayoutVisualizerProps) {
     updateScale();
     return () => window.removeEventListener('resize', updateScale);
   }, []);
+
+  if (isCalculating) {
+    const radius = 50;
+    const strokeWidth = 8;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference - (progress / 100) * circumference;
+
+    return (
+      <div className="w-full aspect-[12.03/2.35] min-h-[350px] bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center p-8 transition-all duration-300 relative overflow-hidden shadow-inner">
+        {/* Subtle decorative background pulse */}
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-teal-500/5 to-transparent pointer-events-none" />
+
+        <div className="relative flex flex-col items-center max-w-md w-full text-center space-y-5 z-10">
+          
+          {/* Circular Progress Wheel */}
+          <div className="relative flex items-center justify-center w-32 h-32">
+            {/* Outer decorative spinning dashed track helper */}
+            <div className="absolute inset-0 rounded-full border border-dashed border-emerald-500/20 animate-spin" style={{ animationDuration: '15s' }} />
+            
+            <svg width="120" height="120" style={{ transform: 'rotate(-90deg)' }} className="transform">
+              <defs>
+                <linearGradient id="circleProgressGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#10b981" />
+                  <stop offset="100%" stopColor="#0d9488" />
+                </linearGradient>
+              </defs>
+              
+              {/* Backing Circle Track */}
+              <circle
+                r={radius}
+                cx="60"
+                cy="60"
+                fill="transparent"
+                stroke="#e2e8f0"
+                strokeWidth={strokeWidth}
+                className="opacity-70"
+              />
+              
+              {/* Animated Progress Circle */}
+              <circle
+                r={radius}
+                cx="60"
+                cy="60"
+                fill="transparent"
+                stroke="url(#circleProgressGrad)"
+                strokeWidth={strokeWidth}
+                strokeDasharray={circumference}
+                strokeDashoffset={offset}
+                strokeLinecap="round"
+                className="transition-all duration-200 ease-out"
+              />
+            </svg>
+            
+            {/* Inner Percentage Display */}
+            <div className="absolute flex flex-col items-center">
+              <span className="text-3xl font-extrabold font-mono tracking-tight text-gray-850">
+                {progress}%
+              </span>
+            </div>
+          </div>
+
+          {/* Texts below */}
+          <div className="space-y-1.5 px-4 w-full">
+            <h4 className="text-base font-bold text-gray-700 tracking-tight flex items-center justify-center space-x-2">
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>Running Visual Optimization</span>
+            </h4>
+            <p className="text-sm font-semibold text-emerald-600/90 font-mono tracking-tight text-center truncate max-w-sm mx-auto">
+              {status || 'Searching for best pattern...'}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!result) {
     return (

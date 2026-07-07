@@ -607,7 +607,12 @@ export default function App() {
           <div className="lg:col-span-2 space-y-6">
             
             {/* Visualization */}
-            <LayoutVisualizer result={result} />
+            <LayoutVisualizer 
+              result={result} 
+              isCalculating={isCalculating}
+              progress={calculationProgress}
+              status={calculationStatus}
+            />
 
             {/* Results Summary */}
             {result && (
