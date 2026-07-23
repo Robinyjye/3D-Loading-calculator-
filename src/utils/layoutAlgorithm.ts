@@ -203,42 +203,29 @@ export function* calculateLayoutGenerator(
         currentOrientMode = pIdx % 2 === 0 ? 'flat' : 'side';
       }
 
-      const isCurrentSwimSpa = product.series === 'swimspas' || product.name.toLowerCase().includes('swimspa');
+      const isCurrentSwimSpa = product.series === 'swimspas' || product.name.toLowerCase().includes('swimspa') || product.name.toLowerCase().includes('afs');
 
       if (isCurrentSwimSpa) {
-        // "swim spa优先尝试叠放，然后再试竖放" (Stacking first, then vertical)
-        // Stacking/Flat means orientation height is <= original product height.
-        // Vertical/Standing up means orientation height is > original product height.
+        // Rule: "所有swim spa 侧放" (All swim spas placed on their side)
+        // Side placement for swim spa means orientation height `h` equals product.width (e.g. 2.269m)
         orientations.sort((a, b) => {
-          const aVertical = a.h > product.height + 0.01;
-          const bVertical = b.h > product.height + 0.01;
-          if (aVertical !== bVertical) {
-            return aVertical ? 1 : -1; // Prioritize non-vertical (stacking/flat) first
+          const aSide = Math.abs(a.h - product.width) < 0.01;
+          const bSide = Math.abs(b.h - product.width) < 0.01;
+          if (aSide !== bSide) {
+            return aSide ? -1 : 1; // Prioritize side placement (standing on side edge)
           }
-          // Tie-breakers: Use the active orientation mode sorting rules
-          if (currentOrientMode === 'flat') {
-            if (Math.abs(a.h - b.h) > 0.01) return a.h - b.h; 
-            return b.w - a.w;
-          } else if (currentOrientMode === 'side') {
-            if (Math.abs(b.h - a.h) > 0.01) return b.h - a.h;
-            return b.w - a.w; 
-          } else if (currentOrientMode === 'random') {
-            return Math.random() - 0.5;
-          } else {
-            if (b.w !== a.w) return b.w - a.w;
-            if (b.l !== a.l) return b.l - a.l;
-            return 0;
-          }
+          if (b.w !== a.w) return b.w - a.w;
+          return b.l - a.l;
         });
       } else if (product.height > 0.82) {
-        // "高度大于0.82m的产品，优先尝试竖放，再尝试叠放" (Vertical first, then stacking/flat)
+        // "高度大于0.82m的产品，优先尝试竖放" (Vertical standing up first)
         orientations.sort((a, b) => {
           const aVertical = a.h > product.height + 0.01;
           const bVertical = b.h > product.height + 0.01;
           if (aVertical !== bVertical) {
             return aVertical ? -1 : 1; // Prioritize vertical (standing up) first
           }
-          // Tie-breakers: Use the active orientation mode sorting rules
+          // Tie-breakers: Use active orientation mode
           if (currentOrientMode === 'flat') {
             if (Math.abs(a.h - b.h) > 0.01) return a.h - b.h; 
             return b.w - a.w;
@@ -284,42 +271,14 @@ export function* calculateLayoutGenerator(
       for (let i = 0; i < spaces.length; i++) {
         const s = spaces[i];
         
-        let seriesBelow = 'none';
-        let itemBelow: PlacedItem | null = null;
         const isOnFloor = Math.abs(s.y) < 0.001;
         if (!isOnFloor) {
-          for (const item of placedItems) {
-            const topY = item.y + item.height + GAP;
-            if (Math.abs(topY - s.y) < 0.01) {
-              const xOverlap = Math.max(0, Math.min(s.x + s.l, item.x + item.length) - Math.max(s.x, item.x));
-              const zOverlap = Math.max(0, Math.min(s.z + s.w, item.z + item.width) - Math.max(s.z, item.z));
-              if (xOverlap > 0.001 && zOverlap > 0.001) {
-                seriesBelow = item.product.series || (item.product.name.toLowerCase().includes('swimspa') ? 'swimspas' : 'spas');
-                itemBelow = item;
-                break;
-              }
-            }
-          }
+          // Rule: "所有产品不能叠放" (All products cannot be stacked on top of each other)
+          continue; // Skip any space that is elevated above floor level
         }
 
-        // Rule: Products with length < 1.82m cannot be stacked on top of a swim spa
-        if (itemBelow && product.length < 1.82) {
-          const isBelowSwimSpa = itemBelow.product.series === 'swimspas' || itemBelow.product.name.toLowerCase().includes('swimspa');
-          if (isBelowSwimSpa) {
-            continue; // Skip this space entirely!
-          }
-        }
-
-        let needsPallet = false;
-        let palletHeight = 0;
-        
-        if (isOnFloor) {
-           needsPallet = true;
-           palletHeight = 0.17;
-        } else if (seriesBelow === 'swimspas' && !isCurrentSwimSpa) {
-           needsPallet = true;
-           palletHeight = 0.03;
-        }
+        let needsPallet = true;
+        let palletHeight = 0.17;
 
         let bestOriForSpace: typeof orientations[0] | null = null;
         for (const ori of orientations) {
