@@ -703,7 +703,7 @@ export default function App() {
         </div>
 
         <footer className="text-center text-gray-400 text-sm pt-8 pb-4">
-          Version 1.0 Designed and Developed by Robin (robin.yj.ye@gmail.com) Initial Release: April 2026
+          Version 2.0 Designed and Developed by Robin (robin.yj.ye@gmail.com) Initial Release: April 2026
         </footer>
 
         {/* Add Product Modal */}
