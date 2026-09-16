@@ -20,6 +20,7 @@ const NAMESPACE = 'container-calc-stats';
 
 const STORAGE_KEYS = {
   VISITOR_ID: 'container_calc_visitor_id',
+  USER_REGISTERED: 'container_calc_unique_registered_v2',
   FIRST_VISIT: 'container_calc_first_visit',
   LOCAL_VISITS: 'container_calc_local_visits',
   LOCAL_CALCS: 'container_calc_local_calcs',
@@ -28,13 +29,17 @@ const STORAGE_KEYS = {
   CACHED_GLOBAL: 'container_calc_cached_global',
 };
 
-// Helper to safely read a numeric value from the API
+// Helper to safely read or hit a numeric value from the API with timeout
 async function fetchValue(endpoint: 'get' | 'hit', key: string): Promise<number | null> {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
     const res = await fetch(`${API_BASE}/${endpoint}/${NAMESPACE}/${key}`, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
     if (!res.ok) return null;
     const data = await res.json();
     return typeof data.value === 'number' ? data.value : null;
@@ -95,7 +100,7 @@ export async function fetchGlobalStats(): Promise<GlobalStats> {
     const isOnline = remoteUsers !== null || remoteVisits !== null || remoteCalcs !== null;
 
     const uniqueUsers = Math.max(remoteUsers ?? cached.uniqueUsers ?? 1, 1);
-    const totalVisits = Math.max(remoteVisits ?? cached.totalVisits ?? local.localVisits, local.localVisits, 1);
+    const totalVisits = Math.max(remoteVisits ?? cached.totalVisits ?? local.localVisits, local.localVisits, uniqueUsers, 1);
     const totalCalculations = Math.max(remoteCalcs ?? cached.totalCalculations ?? local.localCalculations, local.localCalculations, 0);
     const totalUsage = totalVisits + totalCalculations;
 
@@ -123,15 +128,26 @@ export async function fetchGlobalStats(): Promise<GlobalStats> {
 }
 
 export async function recordVisit(): Promise<GlobalStats> {
-  const existingVisitor = localStorage.getItem(STORAGE_KEYS.VISITOR_ID);
+  const isRegistered = localStorage.getItem(STORAGE_KEYS.USER_REGISTERED) === 'true';
   const sessionRecorded = sessionStorage.getItem(STORAGE_KEYS.SESSION_RECORDED);
 
   // Synchronously ensure visitor ID exists
-  if (!existingVisitor) {
-    getLocalDeviceStats();
+  getLocalDeviceStats();
+
+  const promises: Promise<unknown>[] = [];
+
+  // 1. If this device has not registered as a unique user, hit unique_users on remote
+  if (!isRegistered) {
+    promises.push(
+      fetchValue('hit', 'unique_users').then((val) => {
+        if (val !== null) {
+          localStorage.setItem(STORAGE_KEYS.USER_REGISTERED, 'true');
+        }
+      })
+    );
   }
 
-  // Record 1 visit per browser session for BOTH local and remote
+  // 2. Record 1 visit per browser session for BOTH local and remote
   if (!sessionRecorded) {
     sessionStorage.setItem(STORAGE_KEYS.SESSION_RECORDED, 'true');
 
@@ -140,19 +156,15 @@ export async function recordVisit(): Promise<GlobalStats> {
     localStorage.setItem(STORAGE_KEYS.LOCAL_VISITS, currentVisits.toString());
     localStorage.setItem(STORAGE_KEYS.LAST_ACTIVE, new Date().toISOString());
 
-    // Hit remote counters in parallel
-    const promises: Promise<number | null>[] = [
-      fetchValue('hit', 'total_visits'),
-    ];
-
-    if (!existingVisitor) {
-      promises.push(fetchValue('hit', 'unique_users'));
-    }
-
-    await Promise.allSettled(promises);
+    // Hit remote visits counter
+    promises.push(fetchValue('hit', 'total_visits'));
   } else {
     // Session already counted, just update last active timestamp
     localStorage.setItem(STORAGE_KEYS.LAST_ACTIVE, new Date().toISOString());
+  }
+
+  if (promises.length > 0) {
+    await Promise.allSettled(promises);
   }
 
   return fetchGlobalStats();
