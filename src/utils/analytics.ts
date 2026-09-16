@@ -126,21 +126,33 @@ export async function recordVisit(): Promise<GlobalStats> {
   const existingVisitor = localStorage.getItem(STORAGE_KEYS.VISITOR_ID);
   const sessionRecorded = sessionStorage.getItem(STORAGE_KEYS.SESSION_RECORDED);
 
-  // Update local device record
-  const localVisits = parseInt(localStorage.getItem(STORAGE_KEYS.LOCAL_VISITS) || '0', 10) + 1;
-  localStorage.setItem(STORAGE_KEYS.LOCAL_VISITS, localVisits.toString());
-  localStorage.setItem(STORAGE_KEYS.LAST_ACTIVE, new Date().toISOString());
-
-  // If new visitor, increment unique user counter on remote
+  // Synchronously ensure visitor ID exists
   if (!existingVisitor) {
-    getLocalDeviceStats(); // initializes visitor id
-    fetchValue('hit', 'unique_users').catch(() => {});
+    getLocalDeviceStats();
   }
 
-  // Increment total visits if new session
+  // Record 1 visit per browser session for BOTH local and remote
   if (!sessionRecorded) {
     sessionStorage.setItem(STORAGE_KEYS.SESSION_RECORDED, 'true');
-    await fetchValue('hit', 'total_visits');
+
+    // Update local device visit counter
+    const currentVisits = parseInt(localStorage.getItem(STORAGE_KEYS.LOCAL_VISITS) || '0', 10) + 1;
+    localStorage.setItem(STORAGE_KEYS.LOCAL_VISITS, currentVisits.toString());
+    localStorage.setItem(STORAGE_KEYS.LAST_ACTIVE, new Date().toISOString());
+
+    // Hit remote counters in parallel
+    const promises: Promise<number | null>[] = [
+      fetchValue('hit', 'total_visits'),
+    ];
+
+    if (!existingVisitor) {
+      promises.push(fetchValue('hit', 'unique_users'));
+    }
+
+    await Promise.allSettled(promises);
+  } else {
+    // Session already counted, just update last active timestamp
+    localStorage.setItem(STORAGE_KEYS.LAST_ACTIVE, new Date().toISOString());
   }
 
   return fetchGlobalStats();

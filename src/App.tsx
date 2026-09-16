@@ -44,9 +44,12 @@ export default function App() {
   const [localStats, setLocalStats] = useState<LocalDeviceStats>(() => getLocalDeviceStats());
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [isRefreshingStats, setIsRefreshingStats] = useState(false);
+  const visitRecordedRef = useRef(false);
 
   // Record link visit on mount & fetch global stats
   useEffect(() => {
+    if (visitRecordedRef.current) return;
+    visitRecordedRef.current = true;
     recordVisit().then(newStats => {
       setStats(newStats);
       setLocalStats(getLocalDeviceStats());
