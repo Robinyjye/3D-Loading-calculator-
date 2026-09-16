@@ -16,18 +16,37 @@ export interface LocalDeviceStats {
 }
 
 const API_BASE = 'https://abacus.jasoncameron.dev';
-const NAMESPACE = 'container-calc-stats';
+// Fresh namespace starting from today (2026-09-16)
+const NAMESPACE = 'container-calc-2026-09-16';
 
 const STORAGE_KEYS = {
-  VISITOR_ID: 'container_calc_visitor_id',
-  USER_REGISTERED: 'container_calc_unique_registered_v2',
-  FIRST_VISIT: 'container_calc_first_visit',
-  LOCAL_VISITS: 'container_calc_local_visits',
-  LOCAL_CALCS: 'container_calc_local_calcs',
-  LAST_ACTIVE: 'container_calc_last_active',
-  SESSION_RECORDED: 'container_calc_session_recorded',
-  CACHED_GLOBAL: 'container_calc_cached_global',
+  VISITOR_ID: 'container_calc_20260916_visitor_id',
+  USER_REGISTERED: 'container_calc_20260916_unique_registered',
+  FIRST_VISIT: 'container_calc_20260916_first_visit',
+  LOCAL_VISITS: 'container_calc_20260916_local_visits',
+  LOCAL_CALCS: 'container_calc_20260916_local_calcs',
+  LAST_ACTIVE: 'container_calc_20260916_last_active',
+  SESSION_RECORDED: 'container_calc_20260916_session_recorded',
+  CACHED_GLOBAL: 'container_calc_20260916_cached_global',
 };
+
+// Clear legacy pre-reset records from browser storage
+try {
+  const legacyKeys = [
+    'container_calc_visitor_id',
+    'container_calc_unique_registered_v2',
+    'container_calc_first_visit',
+    'container_calc_local_visits',
+    'container_calc_local_calcs',
+    'container_calc_last_active',
+    'container_calc_session_recorded',
+    'container_calc_cached_global',
+  ];
+  legacyKeys.forEach(k => localStorage.removeItem(k));
+  sessionStorage.removeItem('container_calc_session_recorded');
+} catch {
+  // ignore in SSR / sandbox
+}
 
 // Helper to safely read or hit a numeric value from the API with timeout
 async function fetchValue(endpoint: 'get' | 'hit', key: string): Promise<number | null> {
@@ -99,8 +118,8 @@ export async function fetchGlobalStats(): Promise<GlobalStats> {
 
     const isOnline = remoteUsers !== null || remoteVisits !== null || remoteCalcs !== null;
 
-    const uniqueUsers = Math.max(remoteUsers ?? cached.uniqueUsers ?? 1, 1);
-    const totalVisits = Math.max(remoteVisits ?? cached.totalVisits ?? local.localVisits, local.localVisits, uniqueUsers, 1);
+    const uniqueUsers = Math.max(remoteUsers ?? cached.uniqueUsers ?? 0, 0);
+    const totalVisits = Math.max(remoteVisits ?? cached.totalVisits ?? local.localVisits, local.localVisits, 0);
     const totalCalculations = Math.max(remoteCalcs ?? cached.totalCalculations ?? local.localCalculations, local.localCalculations, 0);
     const totalUsage = totalVisits + totalCalculations;
 
@@ -117,10 +136,10 @@ export async function fetchGlobalStats(): Promise<GlobalStats> {
     return stats;
   } catch {
     return {
-      uniqueUsers: cached.uniqueUsers || 1,
-      totalVisits: Math.max(cached.totalVisits || 1, local.localVisits),
-      totalCalculations: Math.max(cached.totalCalculations || 0, local.localCalculations),
-      totalUsage: (cached.totalVisits || 1) + (cached.totalCalculations || 0),
+      uniqueUsers: cached.uniqueUsers ?? 0,
+      totalVisits: Math.max(cached.totalVisits ?? 0, local.localVisits),
+      totalCalculations: Math.max(cached.totalCalculations ?? 0, local.localCalculations),
+      totalUsage: (cached.totalVisits ?? 0) + (cached.totalCalculations ?? 0),
       lastUpdated: new Date().toISOString(),
       isOnline: false,
     };
