@@ -1,0 +1,159 @@
+export interface GlobalStats {
+  uniqueUsers: number;
+  totalVisits: number;
+  totalCalculations: number;
+  totalUsage: number;
+  lastUpdated: string;
+  isOnline: boolean;
+}
+
+export interface LocalDeviceStats {
+  visitorId: string;
+  firstVisit: string;
+  localVisits: number;
+  localCalculations: number;
+  lastActive: string;
+}
+
+const API_BASE = 'https://abacus.jasoncameron.dev';
+const NAMESPACE = 'container-calc-stats';
+
+const STORAGE_KEYS = {
+  VISITOR_ID: 'container_calc_visitor_id',
+  FIRST_VISIT: 'container_calc_first_visit',
+  LOCAL_VISITS: 'container_calc_local_visits',
+  LOCAL_CALCS: 'container_calc_local_calcs',
+  LAST_ACTIVE: 'container_calc_last_active',
+  SESSION_RECORDED: 'container_calc_session_recorded',
+  CACHED_GLOBAL: 'container_calc_cached_global',
+};
+
+// Helper to safely read a numeric value from the API
+async function fetchValue(endpoint: 'get' | 'hit', key: string): Promise<number | null> {
+  try {
+    const res = await fetch(`${API_BASE}/${endpoint}/${NAMESPACE}/${key}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return typeof data.value === 'number' ? data.value : null;
+  } catch (err) {
+    console.warn(`[Analytics] Failed to ${endpoint} key ${key}:`, err);
+    return null;
+  }
+}
+
+export function getLocalDeviceStats(): LocalDeviceStats {
+  let visitorId = localStorage.getItem(STORAGE_KEYS.VISITOR_ID);
+  let firstVisit = localStorage.getItem(STORAGE_KEYS.FIRST_VISIT);
+  
+  if (!visitorId) {
+    visitorId = `usr_${Math.random().toString(36).substring(2, 8)}_${Date.now().toString(36)}`;
+    firstVisit = new Date().toISOString();
+    localStorage.setItem(STORAGE_KEYS.VISITOR_ID, visitorId);
+    localStorage.setItem(STORAGE_KEYS.FIRST_VISIT, firstVisit);
+  }
+
+  const localVisits = parseInt(localStorage.getItem(STORAGE_KEYS.LOCAL_VISITS) || '0', 10);
+  const localCalculations = parseInt(localStorage.getItem(STORAGE_KEYS.LOCAL_CALCS) || '0', 10);
+  const lastActive = localStorage.getItem(STORAGE_KEYS.LAST_ACTIVE) || new Date().toISOString();
+
+  return {
+    visitorId,
+    firstVisit: firstVisit || new Date().toISOString(),
+    localVisits,
+    localCalculations,
+    lastActive,
+  };
+}
+
+export async function fetchGlobalStats(): Promise<GlobalStats> {
+  const cachedRaw = localStorage.getItem(STORAGE_KEYS.CACHED_GLOBAL);
+  let cached: Partial<GlobalStats> = {};
+  if (cachedRaw) {
+    try {
+      cached = JSON.parse(cachedRaw);
+    } catch {
+      // ignore
+    }
+  }
+
+  const local = getLocalDeviceStats();
+
+  try {
+    const [usersRes, visitsRes, calcsRes] = await Promise.allSettled([
+      fetchValue('get', 'unique_users'),
+      fetchValue('get', 'total_visits'),
+      fetchValue('get', 'total_calculations'),
+    ]);
+
+    const remoteUsers = usersRes.status === 'fulfilled' ? usersRes.value : null;
+    const remoteVisits = visitsRes.status === 'fulfilled' ? visitsRes.value : null;
+    const remoteCalcs = calcsRes.status === 'fulfilled' ? calcsRes.value : null;
+
+    const isOnline = remoteUsers !== null || remoteVisits !== null || remoteCalcs !== null;
+
+    const uniqueUsers = Math.max(remoteUsers ?? cached.uniqueUsers ?? 1, 1);
+    const totalVisits = Math.max(remoteVisits ?? cached.totalVisits ?? local.localVisits, local.localVisits, 1);
+    const totalCalculations = Math.max(remoteCalcs ?? cached.totalCalculations ?? local.localCalculations, local.localCalculations, 0);
+    const totalUsage = totalVisits + totalCalculations;
+
+    const stats: GlobalStats = {
+      uniqueUsers,
+      totalVisits,
+      totalCalculations,
+      totalUsage,
+      lastUpdated: new Date().toISOString(),
+      isOnline,
+    };
+
+    localStorage.setItem(STORAGE_KEYS.CACHED_GLOBAL, JSON.stringify(stats));
+    return stats;
+  } catch {
+    return {
+      uniqueUsers: cached.uniqueUsers || 1,
+      totalVisits: Math.max(cached.totalVisits || 1, local.localVisits),
+      totalCalculations: Math.max(cached.totalCalculations || 0, local.localCalculations),
+      totalUsage: (cached.totalVisits || 1) + (cached.totalCalculations || 0),
+      lastUpdated: new Date().toISOString(),
+      isOnline: false,
+    };
+  }
+}
+
+export async function recordVisit(): Promise<GlobalStats> {
+  const existingVisitor = localStorage.getItem(STORAGE_KEYS.VISITOR_ID);
+  const sessionRecorded = sessionStorage.getItem(STORAGE_KEYS.SESSION_RECORDED);
+
+  // Update local device record
+  const localVisits = parseInt(localStorage.getItem(STORAGE_KEYS.LOCAL_VISITS) || '0', 10) + 1;
+  localStorage.setItem(STORAGE_KEYS.LOCAL_VISITS, localVisits.toString());
+  localStorage.setItem(STORAGE_KEYS.LAST_ACTIVE, new Date().toISOString());
+
+  // If new visitor, increment unique user counter on remote
+  if (!existingVisitor) {
+    getLocalDeviceStats(); // initializes visitor id
+    fetchValue('hit', 'unique_users').catch(() => {});
+  }
+
+  // Increment total visits if new session
+  if (!sessionRecorded) {
+    sessionStorage.setItem(STORAGE_KEYS.SESSION_RECORDED, 'true');
+    await fetchValue('hit', 'total_visits');
+  }
+
+  return fetchGlobalStats();
+}
+
+export async function recordCalculation(): Promise<GlobalStats> {
+  // Update local device record
+  const localCalcs = parseInt(localStorage.getItem(STORAGE_KEYS.LOCAL_CALCS) || '0', 10) + 1;
+  localStorage.setItem(STORAGE_KEYS.LOCAL_CALCS, localCalcs.toString());
+  localStorage.setItem(STORAGE_KEYS.LAST_ACTIVE, new Date().toISOString());
+
+  // Increment remote calculation counter
+  await fetchValue('hit', 'total_calculations');
+
+  return fetchGlobalStats();
+}

@@ -1,10 +1,13 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { PRODUCT_DEFINITIONS, ProductDefinition, CONTAINER_LENGTH, CONTAINER_WIDTH, CONTAINER_HEIGHT } from './constants';
 import { calculateLayout, calculateLayoutGenerator, LayoutResult, CalculationStep } from './utils/layoutAlgorithm';
 import LayoutVisualizer from './components/LayoutVisualizer';
 import { RotateCcw, Play, Waves, Bath, Plus, Trash2, X, Download, Pencil, Upload, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
+import { recordVisit, recordCalculation, fetchGlobalStats, getLocalDeviceStats, GlobalStats, LocalDeviceStats } from './utils/analytics';
+import { UsageStatsModal } from './components/UsageStatsModal';
+import { UsageStatsBadge } from './components/UsageStatsBadge';
 
 export default function App() {
   const [quantities, setQuantities] = useState<Record<string, string>>(() => {
@@ -35,6 +38,31 @@ export default function App() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<{ originalName: string, name: string, length: string, width: string, color: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Usage statistics state
+  const [stats, setStats] = useState<GlobalStats | null>(null);
+  const [localStats, setLocalStats] = useState<LocalDeviceStats>(() => getLocalDeviceStats());
+  const [showStatsModal, setShowStatsModal] = useState(false);
+  const [isRefreshingStats, setIsRefreshingStats] = useState(false);
+
+  // Record link visit on mount & fetch global stats
+  useEffect(() => {
+    recordVisit().then(newStats => {
+      setStats(newStats);
+      setLocalStats(getLocalDeviceStats());
+    }).catch(err => console.warn('Record visit error:', err));
+  }, []);
+
+  const handleRefreshStats = async () => {
+    setIsRefreshingStats(true);
+    try {
+      const refreshed = await fetchGlobalStats();
+      setStats(refreshed);
+      setLocalStats(getLocalDeviceStats());
+    } finally {
+      setIsRefreshingStats(false);
+    }
+  };
 
   // Persist to localStorage
   React.useEffect(() => {
@@ -98,6 +126,12 @@ export default function App() {
     });
 
     if (productsToLoad.length === 0) return;
+
+    // Record calculation usage for global statistics
+    recordCalculation().then(newStats => {
+      setStats(newStats);
+      setLocalStats(getLocalDeviceStats());
+    }).catch(err => console.warn('Record calculation error:', err));
 
     setIsCalculating(true);
     setCalculationProgress(0);
@@ -424,9 +458,10 @@ export default function App() {
           <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
             Container Layout Calculator
           </h1>
-          <p className="text-xl text-gray-600">
-            Optimize product layout for 40HQ containers (12.00m x 2.35m x 2.68m)
-          </p>
+          <div className="inline-flex items-center justify-center gap-2.5 text-xl text-gray-600">
+            <span>Optimize product layout for 40HQ containers (12.00m x 2.35m x 2.68m)</span>
+            <UsageStatsBadge onClick={() => setShowStatsModal(true)} />
+          </div>
         </div>
 
         {/* Sticky Action Bar */}
@@ -703,7 +738,7 @@ export default function App() {
         </div>
 
         <footer className="text-center text-gray-400 text-sm pt-8 pb-4">
-          Version 2.0 Designed and Developed by Robin (robin.yj.ye@gmail.com) Initial Release: April 2026
+          Version 1.0 Designed and Developed by Robin (robin.yj.ye@gmail.com) Initial Release: April 2026
         </footer>
 
         {/* Add Product Modal */}
@@ -859,6 +894,16 @@ export default function App() {
             </div>
           )}
         </AnimatePresence>
+
+        {/* Usage & Visitor Statistics Modal */}
+        <UsageStatsModal
+          isOpen={showStatsModal}
+          onClose={() => setShowStatsModal(false)}
+          stats={stats}
+          localStats={localStats}
+          isRefreshing={isRefreshingStats}
+          onRefresh={handleRefreshStats}
+        />
       </div>
     </div>
   );

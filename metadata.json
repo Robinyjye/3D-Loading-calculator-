@@ -1,5 +1,8 @@
 {
   "name": "Remix: 3D Container Layout Calculator",
-  "description": "Optimizes product layout for 40HQ containers. Features include custom product addition, product deletion, and data persistence across reloads.",
-  "requestFramePermissions": []
+  "description": "Optimizes product layout for 40HQ containers with real-time usage and visitor analytics, custom product addition, and Excel export/import.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
